@@ -6,8 +6,8 @@ This document covers what I did to set up a self-hosted WireGuard VPN server on 
 
 ## Environment
 
-- **Host:** Proxmox VE (kernel 6.17.2)
-- **Hardware:** Intel 4th Gen (Haswell) business workstation
+- **Host:** Proxmox VE 
+- **Hardware:** Intel 4th Gen Dell Optiplex Business Workstation
 - **Container OS:** Debian 12
 - **Client:** Windows PC (WireGuard for Windows)
 
@@ -17,19 +17,17 @@ This document covers what I did to set up a self-hosted WireGuard VPN server on 
 
 I created a privileged LXC container in Proxmox using the web UI. The container had to be **privileged** because WireGuard needs direct access to the host's TUN kernel device (`/dev/net/tun`) to create the encrypted tunnel interface. Unprivileged containers can't access kernel devices by default.
 
-| Setting | Value |
-|---------|-------|
-| CT ID | 101 |
-| Hostname | wireguard |
-| OS | Debian 12 |
-| Disk | 8GB on local-lvm |
-| CPU | 1 core |
-| RAM | 512MB |
-| Swap | 512MB |
-| Network | vmbr0 |
-| Privileged | Yes |
 
-> 📸 **Screenshot:** Proxmox UI showing the completed container creation settings before clicking Finish.
+- Hostname | wireguard 
+- OS | Debian 12 
+- Disk | 8GB on local-lvm 
+- CPU | 1 core 
+- RAM | 512MB 
+- Swap | 512MB 
+- Network | vmbr0 
+- Privileged | Yes
+
+<img width="851" height="558" alt="Wireguard Container" src="https://github.com/user-attachments/assets/78ffb90f-69b2-4c9f-8d3f-b23e5dbd35c4" />
 
 ---
 
@@ -56,8 +54,6 @@ To find the MAC address:
 ip link show eth0
 ```
 
-> 📸 **Screenshot:** Router admin panel showing the DHCP reservation for the WireGuard container.
-
 ---
 
 ## Installing WireGuard
@@ -68,8 +64,9 @@ Inside the container I updated the package list and installed WireGuard and ipta
 apt update && apt upgrade -y
 apt install wireguard iptables -y
 ```
+<img width="429" height="20" alt="Installing iptables" src="https://github.com/user-attachments/assets/d0045105-b595-4f5e-b74c-da780fe2c3b1" />
 
-iptables had to be installed separately — it wasn't included in the base Debian image and WireGuard's PostUp/PostDown rules depend on it for NAT and traffic forwarding. I discovered this when WireGuard failed on first start with `iptables: command not found`.
+<img width="387" height="22" alt="Install Wireguard" src="https://github.com/user-attachments/assets/f9d31584-e12c-4aa4-ac3e-9f1ab8ce3455" />
 
 ---
 
@@ -82,7 +79,7 @@ wg genkey | tee /etc/wireguard/privatekey | wg pubkey > /etc/wireguard/publickey
 chmod 600 /etc/wireguard/privatekey
 ```
 
-The private key was locked down with `chmod 600` so only root can read it. The public key is safe to share and gets distributed to client devices so they can encrypt traffic destined for the server.
+The public key is safe to share and gets distributed to client devices so they can encrypt traffic destined for the server.
 
 ---
 
@@ -131,7 +128,10 @@ wg show
 
 Output showed the interface was up, listening on port 51820, with the correct public key loaded.
 
-> 📸 **Screenshot:** Terminal showing `wg show` output with the interface active and listening port confirmed.
+<img width="568" height="87" alt="Viewing Wireguard" src="https://github.com/user-attachments/assets/ac653612-3db1-4fae-a66f-d0581d35b1dd" />
+
+<img width="765" height="227" alt="Wireguard Active" src="https://github.com/user-attachments/assets/19261c81-9cfa-410f-8315-ae2344fe8c19" />
+
 
 ---
 
@@ -168,28 +168,7 @@ PublicKey = SERVER_PUBLIC_KEY
 Endpoint = SERVER_LOCAL_IP:51820
 AllowedIPs = 10.0.0.0/24
 ```
-
-> 📸 **Screenshot:** WireGuard for Windows showing the tunnel configuration with the interface and peer sections filled in.
-
----
-
-## Verifying the Connection
-
-After activating the tunnel on Windows I ran a ping test from Command Prompt:
-
-```
-ping 10.0.0.1
-```
-
-Result:
-```
-Packets: Sent = 4, Received = 4, Lost = 0 (0% loss)
-Approximate round trip times: Minimum = 3ms, Maximum = 5ms, Average = 4ms
-```
-
-The tunnel was working with 0% packet loss and 3-5ms latency.
-
-> 📸 **Screenshot:** WireGuard Windows app showing the tunnel as Active with transfer data confirming traffic is flowing. Also include the Command Prompt ping result showing 0% packet loss.
+<img width="494" height="102" alt="Wireguard App Connected with PC" src="https://github.com/user-attachments/assets/0ca743b0-1322-49d3-a447-2c106499b257" />
 
 ---
 
@@ -201,27 +180,12 @@ WireGuard failed immediately on first start because iptables wasn't installed in
 **Key format error:**
 WireGuard failed with `Key is not the correct length or format` after adding the peer section. The peer's public key placeholder hadn't been replaced with the actual key. Fixed by editing `wg0.conf` and pasting the correct key.
 
-**cpufrequtils not available:**
-The `cpufrequtils` package had no installation candidate on Proxmox's repos. Switched to `linux-cpupower` instead which provides the same functionality via `cpupower frequency-set`.
-
----
-
-## Useful Commands
-
-| Command | Purpose |
-|---------|---------|
-| `wg show` | Show active WireGuard interfaces and peers |
-| `systemctl status wg-quick@wg0` | Check WireGuard service status |
-| `systemctl restart wg-quick@wg0` | Restart WireGuard |
-| `ip a` | Show all network interfaces and IPs |
-| `journalctl -xeu wg-quick@wg0` | View detailed service logs for troubleshooting |
-
 ---
 
 ## Current Limitations
 
 WireGuard is currently configured for **local network access only**. To enable remote access from outside the home network the following additional steps are needed:
 
-- Configure port forwarding on the router (UDP 51820 → container IP)
+- Configure port forwarding on the router 
 - Set up DuckDNS or similar dynamic DNS service to handle the changing home IP
 - Update the Windows client endpoint from the local IP to the DuckDNS hostname
